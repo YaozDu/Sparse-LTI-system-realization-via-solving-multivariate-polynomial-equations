@@ -196,16 +196,15 @@ for iterations = 1:fragments
             hs{ind} = hi_str;
         end
 
-        %
         msize = subsize(t+1);
-
         ysize = size(a_f,1);
         Mysize = subsize(t+1);
 
         equalities = cell(size(Zeqs,2),1);
 
-        y = sdpvar(ysize,1);
-        My = zeros(msize,msize,'like',y); % We need to define this manually with individual terms
+        cvx_begin sdp quiet
+        variable y(ysize,1)
+        expression My(msize,msize)
 
         for ind1 = 1:msize
             v1 = a_f(ind1,:);
@@ -216,14 +215,17 @@ for iterations = 1:fragments
                 My(ind1,ind2) = y(npos);
             end
         end
-        Constraints = [My>=0,y(1)==1];
+        minimize 1
+        subject to
+        My>=0;
+        y(1)==1;
 
         % This is for M(hy)
         Mhy = cell(size(hs,1),1);
         for ind = 1: size(hs,1)
             trunc = t-dj(ind);
             msubsize = subsize(trunc+1);
-            Msub = zeros(msubsize,'like',y);
+            expression Msub(msubsize,msubsize)
             hc = hs{ind};
             hclen = size(hc,1);
             for pos1 = 1:msubsize
@@ -242,17 +244,12 @@ for iterations = 1:fragments
                 end
             end
             Mhy{ind} = Msub;
-            Constraints = [Constraints,norm(Msub)<=1e-12];
+            norm(Msub)<=1e-12;
         end
-        options = sdpsettings('verbose', 0);
-        sol = optimize(Constraints,1,options);
+        cvx_end
 
-        if sol.problem ~=0
-            disp('Cannot Find a solution');
-            return
-        end
-        yseq = value(y);
-        Mt = value(My);
+        yseq = y;
+        Mt = full(My);
 
         allranks = zeros(1,t+1);
         for ind = 0:t
